@@ -2,7 +2,7 @@ from main import Piece, Board
 from collections import OrderedDict
 # ======================== Class Player =======================================
 
-rules = {'swim': ['Voi', 'SuTu', 'Ho', 'Soi', 'Cho', 'Chuot'],
+rules = {'swim': ['Voi', 'Soi', 'Cho', 'Chuot'],
          'jump_horizontal': ['SuTu', 'Ho', 'Bao'],
          'jump_vertical': ['SuTu', 'Ho'],
          'strength': ['Chuot', 'Meo', 'Cho', 'Soi', 'Bao', 'Ho', 'SuTu', 'Voi'],
@@ -16,7 +16,6 @@ jump_vertical_map = {'pos1': [(3, 2), (3, 3), (3, 5), (3, 6)], 'pos2': [
                                (7, 2), (7, 3), (7, 5), (7, 6)]}
 
 goal = {'red': (9,4), 'black': (1,4)}
-
 
 class Player:
     # student do not allow to change two first functions
@@ -128,12 +127,12 @@ class MovingCase(object):
     def can_attack(self, my_animal, opponent):        
         if(self.is_change_enviroment(my_animal.position, opponent.position)):
             return 0
+        elif (self.get_ally_strength(my_animal) > self.get_opponent_strength(opponent)):
+            return 1
         elif (my_animal.type == 'Chuot' and opponent.type == 'Voi'):
             return 1
         elif (my_animal.type == 'Voi' and opponent.type == 'Chuot'):
             return 0
-        elif (self.get_ally_strength(my_animal) > self.get_opponent_strength(opponent)):
-            return 1
         return 0
 
 
@@ -141,6 +140,13 @@ class MovingCase(object):
         opponent = self.have_opponent(new_pos)
         ally     = self.have_ally(new_pos)
 
+        # khong duoc nhay vao hang cua minh
+        if(self.my_team == 'red'):
+            if(new_pos == (1,4)):
+                return 0
+        else:
+            if(new_pos == (9,4)):
+                return 0
         if(not self.is_valid_position(new_pos)):
             return 0
         if(opponent == None and ally == None):
