@@ -1,5 +1,6 @@
 from main import Piece, Board
 from collections import OrderedDict
+import numpy as np
 # ======================== Class Player =======================================
 
 rules = {'swim': ['Voi', 'Soi', 'Cho', 'Chuot'],
@@ -10,14 +11,25 @@ rules = {'swim': ['Voi', 'Soi', 'Cho', 'Chuot'],
 
 black_trap = [(9, 3), (8, 4), (9, 5)]
 red_trap = [(1, 3), (2, 4), (1, 5)]
-jump_horizontal_map = {'pos1': [(4, 1), (5, 1), (6, 1)], 'pos2': [
-                                 (4, 4), (5, 4), (6, 4)], 'pos3': [(4, 7), (5, 7), (6, 7)]}
-jump_vertical_map = {'pos1': [(3, 2), (3, 3), (3, 5), (3, 6)], 'pos2': [
-                               (7, 2), (7, 3), (7, 5), (7, 6)]}
+goal = {'red': (9, 4), 'black': (1, 4)}
 
-goal = {'red': (9,4), 'black': (1,4)}
 
-class Player:
+
+def distance(pos1, pos2):
+    delta_x = pos1[0] - pos2[0]
+    delta_y = pos1[1] - pos2[1]
+    return np.sqrt(delta_x * delta_x + delta_y * delta_y)
+def delta_distance(prev_pos, new_pos, goal):
+    return distance(prev_pos, goal) - distance(new_pos, goal)
+
+MIN_DISTANCE = distance((1,2), (9,4)) - distance((1,3), (9,4))
+MAX_DISTANCE = delta_distance((3,3), (7,3), (9,4))
+MAX_STRENGTH = 8
+SCORE_GOAL = 100
+
+weights = [0.99405269, 0.40658621, 0.9204814]
+
+class Player():
     # student do not allow to change two first functions
     def __init__(self, str_name):
         self.str = str_name
@@ -29,13 +41,61 @@ class Player:
     # The return value should be a move that is denoted by:
         # piece: selected piece
         # (row, col): new position of selected piece
+
+    def get_strength_score(self, animal):
+        if(animal):
+            return (rules['strength'].index(animal.type) + 1) / MAX_STRENGTH
+        else:
+            return 0
+
+    def get_distance_score(self, animal, new_pos, team):
+        if(team == 'red'):
+            return (distance(animal.position, goal['red']) - distance(new_pos, goal['red'])) / MAX_DISTANCE
+        else:
+            return (distance(animal.position, goal['black']) - distance(new_pos, goal['black'])) / MAX_DISTANCE
+
+    def get_goal_score(self, new_pos):
+        if(new_pos in goal.values()):
+            return SCORE_GOAL
+        else:
+            return 0
+
+    def get_score(self, animal, opponent, new_pos, team):
+        return  weights[0] * self.get_strength_score(animal) + \
+                weights[1] * self.get_strength_score(opponent) + \
+                weights[2] * self.get_distance_score(animal, new_pos, team) + \
+                self.get_goal_score(new_pos)
+
+    
+    def reward(self, moving_case):
+        strategy = moving_case.strategy
+        piece = None
+        new_pos = None
+        max_score = -999
+        score = 0
+        for animal in strategy:
+            l_move = strategy.get(animal)
+            # print('animal', animal)
+            # print('strength', self.get_strength_score(animal))
+            # print('list move', l_move)
+            for new_pos_ in l_move:
+                opponent = moving_case.have_opponent(new_pos_)
+                score = self.get_score(animal, opponent, new_pos_, moving_case.my_team)
+                if(score > max_score):
+                    piece = animal
+                    new_pos = new_pos_
+                    max_score = score
+        return piece, new_pos
+            
+
+
     def next_move(self, state):
-        piece = Piece('Voi', (6, 7))
-        new_pos = (7, 7)
+        # piece = Piece('Voi', (6, 7))
+        # new_pos = (7, 7)
         my_strategy = MovingCase(self.str, state)
         my_strategy.get_list_strategy()
-        temp = OrderedDict(my_strategy.strategy)
-        print(temp)
+
+        piece, new_pos = self.reward(my_strategy)
         return piece, new_pos
 
 
@@ -71,11 +131,10 @@ class MovingCase(object):
                 return 0
         return rules['strength'].index(opponent.type) + 1
 
-
     def in_water(self, position):
         x = position[0]
         y = position[1]
-        return ((x >3 and x < 7) and ((y > 1 and y < 4) or (y > 4 and y < 7)))
+        return ((x > 3 and x < 7) and ((y > 1 and y < 4) or (y > 4 and y < 7)))
 
     def is_change_enviroment(self, pre_pos, new_pos):
         if(self.in_water(pre_pos) and not self.in_water(new_pos)):
@@ -86,22 +145,24 @@ class MovingCase(object):
             return 0
 
     def is_left_water(self, pos):
-        return 1 if pos[0] > 3 and pos[0] < 7 and pos[1] == 1 else 0
+        return pos[0] > 3 and pos[0] < 7 and pos[1] == 1
 
     def is_middle_water(self, pos):
-        return 1 if pos[0] > 3 and pos[0] < 7 and pos[1] == 4 else 0
+        return pos[0] > 3 and pos[0] < 7 and pos[1] == 4
 
     def is_right_water(self, pos):
-        return 1 if pos[0] > 3 and pos[0] < 7 and pos[1] == 7 else 0
+        return pos[0] > 3 and pos[0] < 7 and pos[1] == 7
 
     def is_bellow_water(self, pos):
-        return 1 if (pos[0] == 3 and pos[1] > 1 and pos[1] < 4) or (pos[0] == 3 and pos[1] > 4 and pos[1] < 7) else 0
+        return (pos[0] == 3 and pos[1] > 1 and pos[1] < 4) or \
+                (pos[0] == 3 and pos[1] > 4 and pos[1] < 7)
 
     def is_above_water(self, pos):
-        return 1 if (pos[0] == 7 and pos[1] > 1 and pos[1] < 4) or (pos[0] == 7 and pos[1] > 4 and pos[1] < 7) else 0
+        return (pos[0] == 7 and pos[1] > 1 and pos[1] < 4) or \
+                (pos[0] == 7 and pos[1] > 4 and pos[1] < 7)
 
     def can_swim(self, my_animal):
-        return 1 if (my_animal.type in rules.get('swim', 'nothing')) else 0
+        return (my_animal.type in rules.get('swim', 'nothing'))
 
     def have_opponent(self, new_pos):
         for opponent in self.opponent_list:
@@ -109,43 +170,34 @@ class MovingCase(object):
                 return opponent
         return None
 
-    def have_ally(self, new_pos):  
+    def have_ally(self, new_pos):
         for ally in self.ally_list:
             if(ally.position == new_pos):
                 return ally
         return None
-    
-
-# Xet truong hop co doi thu o new_pos:
-            #   * co doi thu o vi tri moi
-            #   * vi tri moi co moi truong khac khong
-            #   * doi thu o vi tri moi co o trong bay khong
-            #   * co an duoc doi thu o vi tri moi khong
-            #   * neu quan minh o trong trap thi khong the tan cong
 
 
-    def can_attack(self, my_animal, opponent):        
+    def can_attack(self, my_animal, opponent):
         if(self.is_change_enviroment(my_animal.position, opponent.position)):
             return 0
-        elif (self.get_ally_strength(my_animal) > self.get_opponent_strength(opponent)):
-            return 1
         elif (my_animal.type == 'Chuot' and opponent.type == 'Voi'):
             return 1
         elif (my_animal.type == 'Voi' and opponent.type == 'Chuot'):
             return 0
+        elif (self.get_ally_strength(my_animal) > self.get_opponent_strength(opponent)):
+            return 1
         return 0
-
 
     def can_move_around(self, my_animal, new_pos):
         opponent = self.have_opponent(new_pos)
-        ally     = self.have_ally(new_pos)
+        ally = self.have_ally(new_pos)
 
         # khong duoc nhay vao hang cua minh
         if(self.my_team == 'red'):
-            if(new_pos == (1,4)):
+            if(new_pos == (1, 4)):
                 return 0
         else:
-            if(new_pos == (9,4)):
+            if(new_pos == (9, 4)):
                 return 0
         if(not self.is_valid_position(new_pos)):
             return 0
@@ -166,7 +218,7 @@ class MovingCase(object):
         x = pos[0]
         y = pos[1]
         return (1 if (x > 0 and x < 10 and y > 0 and y < 8) else 0)
-    
+
     def get_list_move(self, my_animal):
         x = my_animal.position[0]
         y = my_animal.position[1]
@@ -174,22 +226,22 @@ class MovingCase(object):
         empty_list = []
 
         # check around of animal's position
-        above_pos = (x,y+1)
+        above_pos = (x, y+1)
         if(self.can_move_around(my_animal, above_pos)):
             empty_list.append(above_pos)
 
-        bellow_pos = (x,y-1)
+        bellow_pos = (x, y-1)
         if(self.can_move_around(my_animal, bellow_pos)):
             empty_list.append(bellow_pos)
 
-        right_pos = (x+1, y)            
+        right_pos = (x+1, y)
         if(self.can_move_around(my_animal, right_pos)):
             empty_list.append(right_pos)
 
-        left_pos = (x-1,y)            
+        left_pos = (x-1, y)
         if(self.can_move_around(my_animal, left_pos)):
             empty_list.append(left_pos)
-        
+
         # check through water of animal's position
         if(my_animal.type in rules.get('jump_horizontal', 'nothing')):
             if(self.is_left_water(my_animal.position)):
@@ -217,8 +269,6 @@ class MovingCase(object):
                     empty_list.append(new_pos)
         return empty_list
 
-
     def get_list_strategy(self):
         for my_animal in self.ally_list:
-            self.strategy[my_animal.type] = self.get_list_move(my_animal)
-
+            self.strategy[my_animal] = self.get_list_move(my_animal)
